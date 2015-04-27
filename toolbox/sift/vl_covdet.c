@@ -33,6 +33,7 @@ enum {
   opt_estimate_orientation,
   opt_estimate_affine_shape,
   opt_frames,
+  opt_num_frames,
   opt_descriptor,
   opt_liop_bins,
   opt_liop_neighbours,
@@ -57,6 +58,7 @@ vlmxOption  options [] = {
   {"EstimateAffineShape",   1,   opt_estimate_affine_shape   },
 
   {"Frames",                1,   opt_frames                  },
+  {"NumFrames",             1,   opt_num_frames              },
 
   {"Descriptor",            1,   opt_descriptor              },
   {"LiopNumSpatialBins",    1,   opt_liop_bins               },
@@ -224,6 +226,8 @@ mexFunction(int nout, mxArray *out[],
   double * userFrames = NULL ;
   vl_size userFrameDimension = 0 ;
   vl_size numUserFrames = 0 ;
+  vl_size numMaxFrames = 0;
+  vl_size * maxFrameIndex = NULL;
 
   VL_USE_MATLAB_ENV ;
 
@@ -382,6 +386,11 @@ mexFunction(int nout, mxArray *out[],
                     userFrameDimension); ;
       }
       break ;
+    case opt_num_frames:      
+      if (!vlmxIsPlainScalar(optarg) || (numMaxFrames = (vl_size)*mxGetPr(optarg)) < 0) {
+          vlmxError(vlmxErrInvalidArgument, "MAXFRMAE is not a non-negative scalar.") ;
+      }
+      break;
 
     default :
       abort() ;
@@ -602,24 +611,70 @@ mexFunction(int nout, mxArray *out[],
       }
     }
 
+    /* limit max number of frames */
+    if (numMaxFrames > 0)
+    {        
+      vl_index i, j;
+      vl_size numFeatures = vl_covdet_get_num_features(covdet) ;
+      if (numFeatures > numMaxFrames)
+      {
+        VlCovDetFeature const * feature = vl_covdet_get_features(covdet);
+         
+        float * peak_abs = mxMalloc(sizeof(float) * numFeatures);
+        for (i = 0 ; i < (signed)numFeatures ; ++i) {
+            peak_abs[i] = vl_abs_f(feature[i].peakScore) ;
+        }
+        
+        /* bubble sort peak_abs inplace */
+        maxFrameIndex = mxMalloc(sizeof(vl_size) * numMaxFrames);
+        for (j = 0; j < (signed)numMaxFrames - 1; ++j) {
+            float max_val = peak_abs[j];
+            vl_index max_idx = j;
+            for (i = j + 1 ; i < (signed)numFeatures ; ++i) {
+                if (peak_abs[i] > max_val) {
+                    max_idx = i;
+                    max_val = peak_abs[i];
+                }                
+            }
+            if (max_idx != j) {
+                peak_abs[max_idx] = peak_abs[j];
+                peak_abs[j] = max_val;
+            }
+            maxFrameIndex[j] = (vl_size)max_idx;
+        }
+        mxFree(peak_abs);  
+        if (verbose) {
+            mexPrintf("vl_covdet: %d features limited by max frames\n", numMaxFrames) ;
+        }
+      }
+    }
+    
     /* store results back */
     {
       vl_index i  ;
       vl_size numFeatures = vl_covdet_get_num_features(covdet) ;
+      if (numMaxFrames > 0 && maxFrameIndex != NULL)
+          numFeatures = numMaxFrames;
+          
       VlCovDetFeature const * feature = vl_covdet_get_features(covdet);
       double * pt ;
 
       OUT(FRAMES) = mxCreateDoubleMatrix (6, numFeatures, mxREAL) ;
       pt = mxGetPr(OUT(FRAMES)) ;
 
-      for (i = 0 ; i < (signed)numFeatures ; ++i) {
+      for (i = 0 ; i < (signed)numFeatures ; ++i) {          
+        vl_index idx = i;
+        if (numMaxFrames > 0 && maxFrameIndex != NULL) {
+            idx = maxFrameIndex[i];
+        }
+            
         /* save the transposed frame, adjust origin to MATLAB's*/
-        *pt++ = feature[i].frame.y + 1 ;
-        *pt++ = feature[i].frame.x + 1 ;
-        *pt++ = feature[i].frame.a22 ;
-        *pt++ = feature[i].frame.a12 ;
-        *pt++ = feature[i].frame.a21 ;
-        *pt++ = feature[i].frame.a11 ;
+        *pt++ = feature[idx].frame.y + 1 ;
+        *pt++ = feature[idx].frame.x + 1 ;
+        *pt++ = feature[idx].frame.a22 ;
+        *pt++ = feature[idx].frame.a12 ;
+        *pt++ = feature[idx].frame.a21 ;
+        *pt++ = feature[idx].frame.a11 ;
       }
     }
 
@@ -643,24 +698,33 @@ mexFunction(int nout, mxArray *out[],
                       patchResolution, patchRelativeExtent,
                       patchRelativeSmoothing);
           }
-          numFeatures = vl_covdet_get_num_features(covdet) ;
+          numFeatures = vl_covdet_get_num_features(covdet) ;          
+          if (numMaxFrames > 0 && maxFrameIndex != NULL)
+              numFeatures = numMaxFrames;
+          
           feature = vl_covdet_get_features(covdet);
           OUT(DESCRIPTORS) = mxCreateNumericMatrix(w*w, numFeatures, mxSINGLE_CLASS, mxREAL) ;
           desc = mxGetData(OUT(DESCRIPTORS)) ;
-          for (i = 0 ; i < (signed)numFeatures ; ++i) {
+          for (i = 0 ; i < (signed)numFeatures ; ++i) {              
+            vl_index idx = i;
+            if (numMaxFrames > 0 && maxFrameIndex != NULL) {
+                idx = maxFrameIndex[i];
+            }
             vl_covdet_extract_patch_for_frame(covdet,
                                     desc,
                                     patchResolution,
                                     patchRelativeExtent,
                                     patchRelativeSmoothing,
-                                    feature[i].frame) ;
+                                    feature[idx].frame) ;
             desc += w*w ;
           }
           break ;
         }
         case VL_COVDET_DESC_SIFT:
         {
-          vl_size numFeatures = vl_covdet_get_num_features(covdet) ;
+          vl_size numFeatures = vl_covdet_get_num_features(covdet) ;             
+          if (numMaxFrames > 0 && maxFrameIndex != NULL)
+              numFeatures = numMaxFrames;
           VlCovDetFeature const * feature = vl_covdet_get_features(covdet);
           VlSiftFilt * sift = vl_sift_new(16, 16, 1, 3, 0) ;
           vl_index i ;
@@ -678,13 +742,17 @@ mexFunction(int nout, mxArray *out[],
           OUT(DESCRIPTORS) = mxCreateNumericMatrix(dimension, numFeatures, mxSINGLE_CLASS, mxREAL) ;
           desc = mxGetData(OUT(DESCRIPTORS)) ;
           vl_sift_set_magnif(sift, 3.0) ;
-          for (i = 0 ; i < (signed)numFeatures ; ++i) {
+          for (i = 0 ; i < (signed)numFeatures ; ++i) {               
+            vl_index idx = i;
+            if (numMaxFrames > 0 && maxFrameIndex != NULL) {
+                idx = maxFrameIndex[i];
+            }
             vl_covdet_extract_patch_for_frame(covdet,
                                               patch,
                                               patchResolution,
                                               patchRelativeExtent,
                                               patchRelativeSmoothing,
-                                              feature[i].frame) ;
+                                              feature[idx].frame) ;
 
             vl_imgradient_polar_f (patchXY, patchXY +1,
                                    2, 2 * patchSide,
@@ -716,7 +784,9 @@ mexFunction(int nout, mxArray *out[],
         }
         case VL_COVDET_DESC_LIOP :
         {          /* TODO: get parameters form input */
-          vl_size numFeatures = vl_covdet_get_num_features(covdet) ;
+          vl_size numFeatures = vl_covdet_get_num_features(covdet) ;   
+          if (numMaxFrames > 0 && maxFrameIndex != NULL)
+              numFeatures = numMaxFrames;
           vl_size dimension ;
           VlCovDetFeature const * feature = vl_covdet_get_features(covdet);
           vl_index i ;
@@ -737,13 +807,17 @@ mexFunction(int nout, mxArray *out[],
           }
           OUT(DESCRIPTORS) = mxCreateNumericMatrix(dimension, numFeatures, mxSINGLE_CLASS, mxREAL);
           desc = mxGetData(OUT(DESCRIPTORS)) ;
-          for(i = 0; i < (signed)numFeatures; i++){
+          for(i = 0; i < (signed)numFeatures; i++){                
+              vl_index idx = i;
+              if (numMaxFrames > 0 && maxFrameIndex != NULL) {
+                  idx = maxFrameIndex[i];
+              }
               vl_covdet_extract_patch_for_frame(covdet,
                                                 patch,
                                                 patchResolution,
                                                 patchRelativeExtent,
                                                 patchRelativeSmoothing,
-                                                feature[i].frame);
+                                                feature[idx].frame);
 
               vl_liopdesc_process(liop, desc, patch);
 
@@ -761,7 +835,9 @@ mexFunction(int nout, mxArray *out[],
 
     if (nout >= 3) {
       vl_index i ;
-      vl_size numFeatures = vl_covdet_get_num_features(covdet) ;
+      vl_size numFeatures = vl_covdet_get_num_features(covdet) ;      
+      if (numMaxFrames > 0 && maxFrameIndex != NULL)
+          numFeatures = numMaxFrames;
       VlCovDetFeature const * feature = vl_covdet_get_features(covdet);
       const char* names[] = {
         "gss",
@@ -782,11 +858,15 @@ mexFunction(int nout, mxArray *out[],
       float * edge = mxGetData(edge_array) ;
       float * orientation = mxGetData(orientation_array) ;
       float * laplacian = mxGetData(laplacian_array) ;
-      for (i = 0 ; i < (signed)numFeatures ; ++i) {
-        peak[i] = feature[i].peakScore ;
-        edge[i] = feature[i].edgeScore ;
-        orientation[i] = feature[i].orientationScore ;
-        laplacian[i] = feature[i].laplacianScaleScore ;
+      for (i = 0 ; i < (signed)numFeatures ; ++i) {                  
+        vl_index idx = i;
+        if (numMaxFrames > 0 && maxFrameIndex != NULL) {
+            idx = maxFrameIndex[i];
+        }
+        peak[i] = feature[idx].peakScore ;
+        edge[i] = feature[idx].edgeScore ;
+        orientation[i] = feature[idx].orientationScore ;
+        laplacian[i] = feature[idx].laplacianScaleScore ;
       }
 
       OUT(INFO) = mxCreateStructMatrix(1, 1, 6, names) ;
@@ -803,4 +883,5 @@ mexFunction(int nout, mxArray *out[],
 
   if (patchXY) mxFree(patchXY) ;
   if (patch) mxFree(patch) ;
+  if (maxFrameIndex) mxFree(maxFrameIndex) ;
 }
