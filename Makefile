@@ -130,6 +130,7 @@ Linux_i386_ARCH := glnx86
 Linux_i686_ARCH := glnx86
 Linux_unknown_ARCH := glnx86
 Linux_x86_64_ARCH := glnxa64
+Linux_aarch64_ARCH := armv8
 
 UNAME := $(shell uname -sm)
 ARCH ?= $($(shell echo "$(UNAME)" | tr \  _)_ARCH)
@@ -230,6 +231,12 @@ endif
 # 2) -fno-stack-protector avoids using a feature requiring GLBIC 2.4
 STD_CFLAGS += -m$(march) -D_GNU_SOURCE -fno-stack-protector
 STD_LDFLAGS += -m$(march) -Wl,--rpath,\$$ORIGIN/ -Wl,--as-needed
+endif
+
+# Linux ARM64
+# Linux
+ifeq "$(ARCH)" "$(filter $(ARCH),armv8)"
+DISABLE_SSE2:=yes
 endif
 
 # Convert back DISALBE_*="no" flags to be empty

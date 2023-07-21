@@ -59,6 +59,10 @@ ifeq ($(ARCH),glnxa64)
 MEX_SUFFIX := mexa64
 endif
 
+ifeq ($(ARCH),armv8)
+MEX_SUFFIX := mexa64
+endif
+
 MEX_BINDIR := toolbox/mex/$(MEX_SUFFIX)
 
 # generate the mex-dir target

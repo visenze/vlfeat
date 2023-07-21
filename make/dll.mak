@@ -76,6 +76,12 @@ DLL_SUFFIX := so
 DLL_LDFLAGS += -m64
 endif
 
+# Linux-arm64
+ifeq ($(ARCH),armv8)
+DLL_SUFFIX := so
+DLL_LDFLAGS += -march=armv8-a
+endif
+
 # --------------------------------------------------------------------
 #                                                                Build
 # --------------------------------------------------------------------

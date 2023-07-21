@@ -266,6 +266,17 @@ defined(__DOXYGEN__)
     defined(__DOXYGEN__)
 #define VL_ARCH_IA64
 #endif
+
+#if defined(_M_ARM64)     || \
+    defined(__aarch64__)  || \
+    defined(__ARM64_ARCH_8__) || \
+    defined(__ARM_ARCH_8A__)  || \
+    defined(__arm64__)  || \
+    defined(__arm64)    || \
+    defined(__arm64__)
+#define VL_ARCH_ARM64
+#endif
+
 /** @} */
 
 /** @name Identifying the host data model
@@ -299,6 +310,7 @@ defined(__DOXYGEN__)
     defined(VL_ARCH_IX86)      || \
     defined(VL_ARCH_IA64)      || \
     defined(VL_ARCH_X64)       || \
+    defined(VL_ARCH_ARM64)     || \
     defined(__DOXYGEN__)
 #define VL_ARCH_LITTLE_ENDIAN
 #endif
@@ -553,6 +565,7 @@ VL_INLINE void vl_swap_host_big_endianness_2 (void *dst, void* src) ;
 /** ------------------------------------------------------------------
  ** @name Obtaining host info at run time
  ** @{ */
+#if defined(VL_ARCH_IX86) || defined(VL_ARCH_IA64) || defined(VL_ARCH_X64)
 
 typedef struct _VlX86CpuInfo
 {
@@ -572,6 +585,7 @@ typedef struct _VlX86CpuInfo
 void _vl_x86cpu_info_init (VlX86CpuInfo *self) ;
 char * _vl_x86cpu_info_to_string_copy (VlX86CpuInfo const *self) ;
 
+#endif 
 /** @} */
 
 /** ------------------------------------------------------------------

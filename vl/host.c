@@ -403,7 +403,9 @@ it supports POSIX threads.
 #undef HAS_CPUID
 #endif
 
-#if defined(HAS_CPUID) & defined(VL_COMPILER_MSC)
+#if defined(HAS_CPUID)
+
+#if defined(VL_COMPILER_MSC)
 #include <intrin.h>
 VL_INLINE void
 _vl_cpuid (vl_int32* info, int function)
@@ -412,7 +414,7 @@ _vl_cpuid (vl_int32* info, int function)
 }
 #endif
 
-#if defined(HAS_CPUID) & defined(VL_COMPILER_GNUC)
+#if defined(VL_COMPILER_GNUC)
 VL_INLINE void
 _vl_cpuid (vl_int32* info, int function)
 {
@@ -487,6 +489,8 @@ _vl_x86cpu_info_to_string_copy (VlX86CpuInfo const *self)
   }
   return string ;
 }
+
+#endif // defined(HAS_CPUID)
 
 /** ------------------------------------------------------------------
  ** @brief Human readable static library configuration
